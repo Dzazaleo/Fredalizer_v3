@@ -3,6 +3,10 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { buildEditCommand, Range } from '../utils/ffmpegBuilder';
 
+// Auto-resolve local paths using Vite's ?url feature
+import coreJsURL from '@ffmpeg/core/dist/esm/ffmpeg-core.js?url';
+import wasmURL from '@ffmpeg/core/dist/esm/ffmpeg-core.wasm?url';
+
 interface VideoProcessorState {
   isReady: boolean;
   isProcessing: boolean;
@@ -44,12 +48,10 @@ export const useVideoProcessor = () => {
           console.debug('[FFmpeg]', message);
         });
 
-        // Load the core using Blob URLs to bypass CORS/COOP/COEP issues
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-        
+        // Load the core using Blob URLs created from local Vite assets
         await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+          coreURL: await toBlobURL(coreJsURL, 'text/javascript'),
+          wasmURL: await toBlobURL(wasmURL, 'application/wasm'),
         });
 
         setState(prev => ({ 
@@ -57,13 +59,13 @@ export const useVideoProcessor = () => {
           isReady: true, 
           status: 'Engine Ready' 
         }));
-      } catch (err) {
+      } catch (err: any) {
         console.error('FFmpeg Load Error:', err);
         setState(prev => ({ 
           ...prev, 
           isReady: false, 
           status: 'Failed to load engine',
-          error: 'Could not initialize video processor. Check browser compatibility (SharedArrayBuffer).'
+          error: `Could not initialize video processor: ${err.message}`
         }));
       }
     };
