@@ -1,0 +1,5 @@
+{
+  "name": "Fredalizer_v3",
+  "description": "A high-performance video ingestion interface featuring drag-and-drop capabilities, strict MIME type validation, and efficient memory management for previewing raw MP4 footage.",
+  "requestFramePermissions": []
+}
