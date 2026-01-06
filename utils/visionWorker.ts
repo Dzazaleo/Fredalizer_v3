@@ -1,16 +1,16 @@
+
 export const visionWorkerCode = `
+importScripts('https://docs.opencv.org/4.8.0/opencv.js');
+
 self.onmessage = function(e) {
   const { type, payload } = e.data;
 
   switch (type) {
     case 'INIT':
-      // OpenCV is loaded via importScripts in the blob context if needed, 
-      // but usually we rely on the main thread or local scope.
-      // In this blob setup, we wait for cv to be ready.
+      // OpenCV is loaded via importScripts
       if (typeof cv !== 'undefined') {
         postMessage({ type: 'READY' });
       } else {
-        // Simple polling for cv if it was loaded via importScripts outside
         const checkCv = setInterval(() => {
           if (typeof cv !== 'undefined' && cv.Mat) {
             clearInterval(checkCv);
