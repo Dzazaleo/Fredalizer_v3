@@ -3,10 +3,6 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { buildEditCommand, Range } from '../utils/ffmpegBuilder';
 
-// Auto-resolve local paths using Vite's ?url feature
-import coreJsURL from '@ffmpeg/core/dist/esm/ffmpeg-core.js?url';
-import wasmURL from '@ffmpeg/core/dist/esm/ffmpeg-core.wasm?url';
-
 interface VideoProcessorState {
   isReady: boolean;
   isProcessing: boolean;
@@ -26,16 +22,13 @@ export const useVideoProcessor = () => {
 
   const ffmpegRef = useRef<FFmpeg | null>(null);
 
-  // Initialize FFmpeg on mount
   useEffect(() => {
     const load = async () => {
       try {
         const ffmpeg = new FFmpeg();
         ffmpegRef.current = ffmpeg;
 
-        // Progress Listener
-        ffmpeg.on('progress', ({ progress, time }) => {
-          // progress is usually 0 to 1
+        ffmpeg.on('progress', ({ progress }) => {
           setState(prev => ({
             ...prev,
             progress: Math.round(progress * 100),
@@ -43,15 +36,17 @@ export const useVideoProcessor = () => {
           }));
         });
 
-        // Log Listener (Optional, good for debugging)
         ffmpeg.on('log', ({ message }) => {
           console.debug('[FFmpeg]', message);
         });
 
-        // Load the core using Blob URLs created from local Vite assets
+        // REVERTED TO SAFE CDN LOADING
+        // We match the core version to the ffmpeg package version (0.12.10)
+        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm';
+        
         await ffmpeg.load({
-          coreURL: await toBlobURL(coreJsURL, 'text/javascript'),
-          wasmURL: await toBlobURL(wasmURL, 'application/wasm'),
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
         });
 
         setState(prev => ({ 
@@ -65,7 +60,7 @@ export const useVideoProcessor = () => {
           ...prev, 
           isReady: false, 
           status: 'Failed to load engine',
-          error: `Could not initialize video processor: ${err.message}`
+          error: `Engine Error: ${err.message || 'Check console details'}`
         }));
       }
     };
@@ -94,49 +89,31 @@ export const useVideoProcessor = () => {
     const outputName = 'output.mp4';
 
     try {
-      // 1. Write File to MEMFS
       await ffmpeg.writeFile(inputName, await fetchFile(file));
-
-      // 2. Build Command
-      // Note: ranges passed here are the ones to KEEP
       const commandArgs = buildEditCommand(ranges, outputName);
-      
       setState(prev => ({ ...prev, status: 'Processing video...' }));
-
-      // 3. Execute
       const result = await ffmpeg.exec(commandArgs);
       
-      if (result !== 0) {
-        throw new Error('FFmpeg processing failed (non-zero exit code)');
-      }
+      if (result !== 0) throw new Error('FFmpeg processing failed');
 
-      // 4. Read Output
       setState(prev => ({ ...prev, status: 'Finalizing...' }));
       const data = await ffmpeg.readFile(outputName);
-      
-      // 5. Create Blob URL
       const blob = new Blob([data], { type: 'video/mp4' });
-      const url = URL.createObjectURL(blob);
-
-      return url;
+      return URL.createObjectURL(blob);
 
     } catch (err: any) {
       console.error('Processing Error:', err);
       setState(prev => ({ 
         ...prev, 
-        error: 'Video processing failed. See console for details.',
+        error: 'Video processing failed.',
         status: 'Error' 
       }));
       return null;
     } finally {
-      // 6. Cleanup Memory
       try {
         await ffmpeg.deleteFile(inputName);
         await ffmpeg.deleteFile(outputName);
-      } catch (e) {
-        // Ignore cleanup errors (file might not exist if failed early)
-      }
-
+      } catch (e) {}
       setState(prev => ({ 
         ...prev, 
         isProcessing: false, 
@@ -146,8 +123,5 @@ export const useVideoProcessor = () => {
     }
   }, [state.isReady]);
 
-  return {
-    ...state,
-    processVideo
-  };
+  return { ...state, processVideo };
 };
